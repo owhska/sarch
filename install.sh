@@ -178,7 +178,7 @@ PACKAGES_CORE=(
 )
 
 PACKAGES_UI=(
-    i3status rofi dunst feh lxappearance network-manager-applet lxsession-gtk3
+    i3status rofi dunst feh lxappearance network-manager-applet lxsession
     polkit-gnome
 )
 
@@ -193,7 +193,7 @@ PACKAGES_AUDIO=(
 
 PACKAGES_UTILITIES=(
     avahi acpi acpid xfce4-power-manager
-    flameshot qview micro xdg-user-dirs
+    flameshot micro xdg-user-dirs
 )
 
 PACKAGES_TERMINAL=(
