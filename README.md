@@ -66,10 +66,7 @@ Keybindings are configured via:
 ├── rules.conf             # Window rules and appearance
 ├── sxhkd/
 │   └── sxhkdrc            # Keybinding configuration
-├── polybar/
-│   ├── config.ini
-│   └── polybar-i3
-├── dunst/
+── dunst/
 │   └── dunstrc
 ├── rofi/
 │   ├── config.rasi
