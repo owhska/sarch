@@ -278,31 +278,143 @@ PACKAGES_ARCH_SPECIFIC=(
     tmux
 )
 
+# Função melhorada para instalação NVIDIA
+install_nvidia_drivers() {
+    msg "Verificando hardware NVIDIA..."
+    
+    # Verificar se há placa NVIDIA
+    if ! lspci | grep -i nvidia &>/dev/null; then
+        echo -e "${YELLOW}⚠️  Nenhuma placa NVIDIA detectada, pulando instalação de drivers${NC}"
+        return 0
+    fi
+    
+    msg "Instalando drivers NVIDIA..."
+    
+    # Remover drivers NVIDIA antigos se existirem
+    if pacman -Qi nvidia &>/dev/null || pacman -Qi nvidia-dkms &>/dev/null; then
+        msg "Removendo drivers NVIDIA antigos..."
+        sudo pacman -Rns --noconfirm nvidia nvidia-dkms nvidia-utils nvidia-settings 2>/dev/null || true
+    fi
+    
+    # Determinar qual pacote NVIDIA instalar baseado no kernel
+    local nvidia_package="nvidia"
+    
+    # Se estiver usando kernel linux-lts
+    if uname -r | grep -q "lts"; then
+        nvidia_package="nvidia-lts"
+        echo -e "${BLUE}Detectado kernel LTS, usando $nvidia_package${NC}"
+    fi
+    
+    # Pacotes NVIDIA para instalar
+    local nvidia_packages=(
+        "$nvidia_package"
+        nvidia-utils
+        nvidia-settings
+    )
+    
+    # Instalar drivers
+    progress_install "Installing NVIDIA drivers" "${nvidia_packages[@]}" || {
+        echo -e "${YELLOW}Tentando método alternativo...${NC}"
+        # Tentar com nvidia-dkms
+        sudo pacman -S --noconfirm nvidia-dkms nvidia-utils nvidia-settings || {
+            die "Falha na instalação dos drivers NVIDIA"
+        }
+    }
+    
+    # Configurar drivers
+    configure_nvidia
+    
+    return 0
+}
+
+# Função de configuração NVIDIA melhorada
 configure_nvidia() {
     msg "Configurando drivers NVIDIA..."
     
-    # Verificar se o driver nouveau está carregado
-    if lsmod | grep -q nouveau; then
-        msg "Desativando driver nouveau..."
-        sudo modprobe -r nouveau 2>/dev/null || true
-    fi
-    
-    # Adicionar blacklist do nouveau
-    if [ ! -f /etc/modprobe.d/blacklist-nouveau.conf ]; then
-        echo -e "${BLUE}Criando blacklist para driver nouveau...${NC}"
-        sudo tee /etc/modprobe.d/blacklist-nouveau.conf > /dev/null << 'EOF'
+    # 1. Blacklist do driver nouveau
+    echo -e "${BLUE}Configurando blacklist para nouveau...${NC}"
+    sudo tee /etc/modprobe.d/nvidia.conf > /dev/null << 'EOF'
+# Desabilitar nouveau
 blacklist nouveau
 options nouveau modeset=0
+
+# Habilitar NVIDIA
+options nvidia-drm modeset=1
 EOF
-    fi
     
-    # Atualizar initramfs
+    # 2. Configuração do mkinitcpio
     if command -v mkinitcpio &> /dev/null; then
         msg "Atualizando initramfs..."
+        
+        # Backup do mkinitcpio.conf original
+        sudo cp /etc/mkinitcpio.conf /etc/mkinitcpio.conf.backup.$(date +%s)
+        
+        # Remover "nouveau" dos hooks se existir
+        sudo sed -i 's/\b nouveau\b//g' /etc/mkinitcpio.conf
+        
+        # Adicionar módulos NVIDIA se não estiverem presentes
+        if ! grep -q "MODULES=.*nvidia" /etc/mkinitcpio.conf; then
+            sudo sed -i '/^MODULES=/ s/)/ nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /etc/mkinitcpio.conf
+        fi
+        
+        # Regenerar initramfs
         sudo mkinitcpio -P
     fi
     
+    # 3. Configuração do Xorg
+    if [ ! -f /etc/X11/xorg.conf.d/10-nvidia.conf ]; then
+        msg "Criando configuração do Xorg para NVIDIA..."
+        sudo mkdir -p /etc/X11/xorg.conf.d
+        
+        sudo tee /etc/X11/xorg.conf.d/10-nvidia.conf > /dev/null << 'EOF'
+Section "OutputClass"
+    Identifier "nvidia"
+    MatchDriver "nvidia-drm"
+    Driver "nvidia"
+    Option "AllowEmptyInitialConfiguration"
+    Option "PrimaryGPU" "yes"
+    ModulePath "/usr/lib/nvidia/xorg"
+    ModulePath "/usr/lib/xorg/modules"
+EndSection
+EOF
+    fi
+    
+    # 4. Configurar Wayland (opcional)
+    if [ -f /etc/gdm/custom.conf ] || [ -f /etc/lightdm/lightdm.conf ]; then
+        echo -e "${BLUE}Configurando para suporte Wayland...${NC}"
+        sudo tee /etc/environment > /dev/null << 'EOF'
+LIBVA_DRIVER_NAME=nvidia
+GBM_BACKEND=nvidia-drm
+__GLX_VENDOR_LIBRARY_NAME=nvidia
+WLR_NO_HARDWARE_CURSORS=1
+EOF
+    fi
+    
+    # 5. Verificar módulos carregados
+    msg "Verificando se módulos NVIDIA estão carregados..."
+    if ! lsmod | grep -q nvidia; then
+        echo -e "${YELLOW}Módulos NVIDIA não estão carregados${NC}"
+        echo -e "${BLUE}Tentando carregar módulos...${NC}"
+        sudo modprobe nvidia nvidia_modeset nvidia_uvm nvidia_drm || {
+            echo -e "${YELLOW}⚠️  Não foi possível carregar módulos agora${NC}"
+            echo -e "${YELLOW}  Eles serão carregados na próxima reinicialização${NC}"
+        }
+    else
+        echo -e "${GREEN}✓ Módulos NVIDIA carregados com sucesso${NC}"
+    fi
+    
+    # 6. Verificar se o driver está funcionando
+    msg "Verificando status do driver NVIDIA..."
+    if command -v nvidia-smi &> /dev/null; then
+        echo -e "\n${GREEN}=== NVIDIA-SMI Output ===${NC}"
+        nvidia-smi
+        echo -e "${GREEN}=========================${NC}"
+    else
+        echo -e "${YELLOW}nvidia-smi não está disponível${NC}"
+    fi
+    
     msg "✅ Configuração NVIDIA concluída"
+    echo -e "${YELLOW}⚠️  REINICIE O SISTEMA para que as mudanças tenham efeito completo!${NC}"
 }
 
 # Install packages by group
@@ -310,11 +422,7 @@ if [ "$ONLY_CONFIG" = false ]; then
     msg "Installing core packages..."
     progress_install "Installing core packages" "${PACKAGES_CORE[@]}" || die "Failed to install core packages"
 
-msg "Installing NVIDIA drivers..."
-    progress_install "Installing NVIDIA drivers" "${PACKAGES_NVIDIA[@]}" || die "Failed to install NVIDIA drivers"
-    
-    # ADICIONE ESTA LINHA - Configurar NVIDIA
-    configure_nvidia
+    install_nvidia_drivers
 
     msg "Installing UI components..."
     progress_install "Installing UI packages" "${PACKAGES_UI[@]}" || die "Failed to install UI packages"
