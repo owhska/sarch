@@ -234,7 +234,6 @@ PACKAGES_NVIDIA=(
     nvidia
     nvidia-utils
     nvidia-settings
-    lib32-nvidia-utils
 )
 
 PACKAGES_UI=(
