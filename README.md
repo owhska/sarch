@@ -2,8 +2,8 @@
 
 ### Quick Install
 ```bash
-git clone https://https://github.com/owhska/sarch.git
-cd sarch
+git clone https://https://github.com/owhska/files.git
+cd files
 chmod +x install.sh
 chmod +x install-yay.sh
 ./install-yay.sh
