@@ -275,7 +275,7 @@ PACKAGES_ARCH_SPECIFIC=(
     kitty
     yazi
     st
-    arc-gtk-theme papirus-icon-theme
+    gnome-themes-extra papirus-icon-theme
     tmux
 )
 
