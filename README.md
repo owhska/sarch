@@ -17,7 +17,7 @@ chmod +x install-yay.sh
 | `i3`                  | Tiling window manager            |
 | `sxhkd`               | Hotkey daemon                    |
 | `picom` `(FT-Labs)`   | Compositor for transparency      |
-| `polybar`             | Status bar                       |
+| `i3-status`             | Status bar                       |
 | `rofi`                | Application launcher             |
 | `dunst`               | Notifications                    |
 | `kitty`               | Terminal emulator (main)         |
